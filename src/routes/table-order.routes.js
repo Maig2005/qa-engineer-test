@@ -41,18 +41,15 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'Order must have at least one item' });
     }
 
-    // BUG F: No duplicate order prevention
-    // Should check if table already has a pending order
-    // Missing validation below:
-    
-    // const existingOrder = (db.table_orders || []).find(
-    //   o => o.merchant_id === merchant_id && 
-    //        o.table_number === table_number && 
-    //        o.status === 'pending'
-    // );
-    // if (existingOrder) {
-    //   return res.status(409).json({ error: 'Table already has a pending order' });
-    // }
+    // BUG F: Prevent duplicate pending orders for the same table
+    const existingOrder = (db.table_orders || []).find(
+      o => o.merchant_id === merchant_id && 
+           o.table_number === table_number && 
+           o.status === 'pending'
+    );
+    if (existingOrder) {
+      return res.status(409).json({ error: 'Table already has a pending order' });
+    }
 
     // Calculate total
     const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -73,8 +70,11 @@ router.post('/', (req, res) => {
     if (!db.table_orders) db.table_orders = [];
     db.table_orders.push(newOrder);
 
-    // Emit socket event (would be handled by socket.io)
-    // io.to(`merchant_${merchant_id}`).emit('new_order', newOrder);
+    // Emit socket event if io is available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`merchant_${merchant_id}`).emit('new_order', newOrder);
+    }
 
     res.status(201).json({
       success: true,
@@ -117,12 +117,15 @@ router.patch('/:id/status', authenticate, (req, res) => {
     order.status = status;
     order.updated_at = new Date();
 
-    // Emit socket event for real-time update
-    // io.to(`table_${order.table_number}`).emit('order_status_changed', {
-    //   order_id: order.id,
-    //   status: status,
-    //   table_number: order.table_number
-    // });
+    // Emit socket event for real-time update if io is available
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`table_${order.table_number}`).emit('order_status_changed', {
+        order_id: order.id,
+        status: status,
+        table_number: order.table_number
+      });
+    }
 
     res.json({
       success: true,

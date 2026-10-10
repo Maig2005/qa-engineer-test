@@ -103,10 +103,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Something went wrong!" });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`✅ EU Pay QA Test API running on http://localhost:${PORT}`);
-  console.log(`📖 Visit http://localhost:${PORT} for available endpoints`);
-  console.log(`🔌 Socket.IO ready for real-time updates`);
-});
+const isTestEnv =
+  process.env.NODE_ENV === "test" ||
+  process.execArgv.includes("--test") ||
+  process.argv.some((arg) => arg.includes(".test.js") || arg.includes("--test"));
 
+if (!isTestEnv) {
+  httpServer.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      // Port already in use; ignore gracefully
+    } else {
+      throw err;
+    }
+  });
+
+  httpServer.listen(PORT, () => {
+    console.log(`✅ EU Pay QA Test API running on http://localhost:${PORT}`);
+    console.log(`📖 Visit http://localhost:${PORT} for available endpoints`);
+    console.log(`🔌 Socket.IO ready for real-time updates`);
+  });
+}
+
+export { app, httpServer, io };
 export default app;
